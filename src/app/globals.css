@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #00FF66;
+  --color-on-primary: #08090C;
+  --color-secondary: #FF2E93;
+  --color-cyan: #00F0FF;
+  --color-yellow: #E2F952;
+  --color-purple: #A855F7;
+  --color-bg: #08090C;
+  --color-surface: #0F1218;
+  --color-card: #141923;
+  --color-border: #1F2633;
+  --color-text: #F1F5F9;
+  --color-muted: #8B949E;
+  --font-poppins: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-righteous: "Impact", "Arial Black", "PingFang SC", sans-serif;
+  --font-space-grotesk: "Trebuchet MS", "Lucida Grande", "PingFang SC", sans-serif;
+  --font-jetbrains-mono: "Consolas", "Courier New", monospace;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-poppins);
+  min-height: 100vh;
+  overflow-x: hidden;
+  selection-background-color: #00FF66;
+  selection-color: #08090C;
+}
+
+/* 赛博点状与网格背景 */
+.cyber-grid-bg {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(31, 38, 51, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 38, 51, 0.35) 1px, transparent 1px);
+}
+
+/* 全息镭射光泽渐变 (Holographic Shimmer) */
+.holographic-foil {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 240, 255, 0.2) 0%,
+    rgba(255, 46, 147, 0.25) 25%,
+    rgba(226, 249, 82, 0.2) 50%,
+    rgba(0, 255, 102, 0.25) 75%,
+    rgba(168, 85, 247, 0.2) 100%
+  );
+  background-size: 300% 300%;
+}
+
+/* 3D 卡牌翻转核心容器 */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* 酸性发光边框 */
+.acid-glow-border {
+  box-shadow: 0 0 0 1px rgba(0, 255, 102, 0.3), 0 0 15px rgba(0, 255, 102, 0.15);
+}
+
+.acid-glow-pink {
+  box-shadow: 0 0 0 1px rgba(255, 46, 147, 0.4), 0 0 15px rgba(255, 46, 147, 0.2);
+}
+
+.acid-glow-cyan {
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.4), 0 0 15px rgba(0, 240, 255, 0.2);
+}
+
+/* 减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 极简发光霓虹滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #08090C;
+}
+::-webkit-scrollbar-thumb {
+  background: #1F2633;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00FF66;
+}
+
