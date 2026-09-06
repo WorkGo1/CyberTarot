@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { soundManager } from "@/lib/audio-synthesizer";
-import { X, Volume2, VolumeX, Smartphone, Key, Cpu, ShieldCheck } from "lucide-react";
+import { testApiConnection, ApiTestResult } from "@/lib/ai-engine";
+import { X, Volume2, VolumeX, Smartphone, Key, Cpu, ShieldCheck, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -15,6 +16,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [baseUrl, setBaseUrl] = useState("");
   const [modelName, setModelName] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ApiTestResult | null>(null);
 
   useEffect(() => {
     setAudioEnabled(soundManager.enabled);
@@ -50,6 +53,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     soundManager.playChimeSound();
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const handleTestConnection = async () => {
+    if (!apiKey.trim()) {
+      setTestResult({
+        success: false,
+        errorCode: "NO_KEY",
+        message: "请先输入 API Key 再进行连通性测试！",
+      });
+      return;
+    }
+    setIsTesting(true);
+    setTestResult(null);
+    soundManager.playButtonClick();
+    const res = await testApiConnection(apiKey, baseUrl, modelName);
+    setTestResult(res);
+    setIsTesting(false);
+    if (res.success) {
+      soundManager.playChimeSound();
+    }
   };
 
   return (
@@ -176,12 +199,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="mt-2 py-2.5 px-4 rounded-xl bg-dark-hover hover:bg-slate-700 text-white font-mono text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            {saveSuccess ? "✓ 配置已保存在本地" : "保存配置至本地浏览器"}
-          </button>
+          {/* 连通性测试反馈区域 */}
+          {testResult && (
+            <div
+              className={`p-3 rounded-xl border text-xs font-mono flex flex-col gap-1.5 animate-fadeIn ${
+                testResult.success
+                  ? "bg-emerald-950/30 border-cyber-lime/50 text-emerald-300"
+                  : "bg-rose-950/30 border-cyber-pink/50 text-rose-300"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-bold">
+                {testResult.success ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-cyber-lime shrink-0" />
+                    <span className="text-cyber-lime">连通测试通过</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-cyber-pink shrink-0" />
+                    <span className="text-cyber-pink">连通测试未通过 [{testResult.errorCode || "FAIL"}]</span>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] leading-relaxed whitespace-pre-line text-slate-300">
+                {testResult.message}
+              </p>
+            </div>
+          )}
+
+          {/* 操作按钮栏 */}
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={isTesting}
+              className="flex-1 py-2.5 px-3 rounded-xl bg-dark-surface hover:bg-dark-hover disabled:opacity-50 text-cyber-cyan border border-cyber-cyan/40 font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-neon-cyan/20"
+            >
+              {isTesting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyber-cyan" />
+                  <span>正在测通中...</span>
+                </>
+              ) : (
+                <>
+                  <span>🧪 测试 API 连通性</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="submit"
+              className="flex-1 py-2.5 px-3 rounded-xl bg-dark-hover hover:bg-slate-700 text-white font-mono text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              {saveSuccess ? "✓ 配置已保存" : "保存配置"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

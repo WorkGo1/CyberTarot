@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { PERSONAS, PersonaId, ScenarioContext, getDeepDiveResponse } from "@/lib/ai-engine";
 import { soundManager } from "@/lib/audio-synthesizer";
+import { MarkdownText } from "@/components/ui/MarkdownText";
 import { Send, Sparkles, MessageCircle } from "lucide-react";
 
 interface DeepDiveChatProps {
@@ -103,7 +104,11 @@ export const DeepDiveChat: React.FC<DeepDiveChatProps> = ({
                     <span>{persona.name}</span>
                   </div>
                 )}
-                {msg.text}
+                {msg.sender === "ai" ? (
+                  <MarkdownText content={msg.text} />
+                ) : (
+                  msg.text
+                )}
               </div>
             </div>
           ))}
@@ -111,7 +116,7 @@ export const DeepDiveChat: React.FC<DeepDiveChatProps> = ({
           {isTyping && (
             <div className="flex items-center gap-2 text-xs text-slate-400 font-mono italic animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-cyber-lime animate-bounce" />
-              {persona.name} 正在快速组织毒舌/治愈金句...
+              {persona.name} 正在连线大模型深度思考中 (最长等待2分钟)...
             </div>
           )}
         </div>

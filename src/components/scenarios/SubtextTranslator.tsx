@@ -2,12 +2,13 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, PERSONAS, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
 import { SocialCardModal } from "@/components/share/SocialCardModal";
-import { MessageSquare, Sparkles, Share2, RotateCcw } from "lucide-react";
+import { MarkdownText } from "@/components/ui/MarkdownText";
+import { MessageSquare, Sparkles, Share2, RotateCcw, Loader2 } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface SubtextTranslatorProps {
@@ -29,6 +30,7 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
   >(null);
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // 抽 3 张牌
   const handleCardsDrawn = async () => {
@@ -50,8 +52,16 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
     const localInterp = generateSmartInterpretation(personaId, context);
     setInterpretation(localInterp);
 
-    const realInterp = await getTarotInterpretation(personaId, context);
-    setInterpretation(realInterp);
+    const hasApiKey = typeof window !== "undefined" && !!localStorage.getItem("cybertarot_api_key")?.trim();
+    if (hasApiKey) {
+      setIsAiLoading(true);
+      try {
+        const realInterp = await getTarotInterpretation(personaId, context);
+        setInterpretation(realInterp);
+      } finally {
+        setIsAiLoading(false);
+      }
+    }
 
     try {
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 }, colors: ["#00F0FF", "#00FF66", "#E2F952"] });
@@ -63,6 +73,7 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
   const handleReset = () => {
     setDrawnCards(null);
     setInterpretation(null);
+    setIsAiLoading(false);
   };
 
   return (
@@ -129,33 +140,68 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
                 </p>
               </div>
 
+              {/* AI 思考中可视化提示 */}
+              {isAiLoading && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-dark-surface via-purple-950/20 to-dark-surface border border-cyber-pink/50 animate-pulse flex flex-col gap-2 shadow-neon-pink/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyber-pink animate-ping" />
+                      <span className="text-xs font-mono font-bold text-cyber-pink">
+                        🔮 【{PERSONAS[personaId].name}】正在连线大模型深度拆解潜台词...
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500">最长等待2分钟</span>
+                  </div>
+                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyber-pink shrink-0" />
+                    正在为您量身定制最具杀伤力与智慧的高情商应对策略...
+                  </p>
+                </div>
+              )}
+
               {/* 3层解构 */}
               <div className="flex flex-col gap-3">
-                <div className="p-3 rounded-xl bg-dark-surface border border-slate-800 flex flex-col gap-1">
+                <div className="p-3.5 rounded-xl bg-dark-surface border border-slate-800 flex flex-col gap-1">
                   <span className="text-xs font-mono font-bold text-slate-400">
                     ① 表面伪装态度 (【{drawnCards[0].card.nameCn}】{drawnCards[0].isReversed ? "逆位" : "正位"}):
                   </span>
-                  <p className="text-xs text-slate-300">
-                    {drawnCards[0].card.workplaceVibe[drawnCards[0].isReversed ? "reversed" : "upright"]}
-                  </p>
+                  <div className="text-xs text-slate-300">
+                    <MarkdownText content={drawnCards[0].card.workplaceVibe[drawnCards[0].isReversed ? "reversed" : "upright"]} />
+                  </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-dark-surface border border-cyber-pink/40 flex flex-col gap-1">
+                <div className="p-3.5 rounded-xl bg-dark-surface border border-cyber-pink/40 flex flex-col gap-1">
                   <span className="text-xs font-mono font-bold text-cyber-pink">
                     ② 真实潜台词 (【{drawnCards[1].card.nameCn}】{drawnCards[1].isReversed ? "逆位" : "正位"}):
                   </span>
-                  <p className="text-xs text-slate-200 font-medium">
-                    {drawnCards[1].card.workplaceVibe.subtextMeaning}
-                  </p>
+                  <div className="text-xs text-slate-200 font-medium">
+                    <MarkdownText content={drawnCards[1].card.workplaceVibe.subtextMeaning} />
+                  </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-dark-surface border border-cyber-lime/40 flex flex-col gap-1">
-                  <span className="text-xs font-mono font-bold text-cyber-lime">
-                    ③ 高情商摸鱼/防雷策略 (【{drawnCards[2].card.nameCn}】{drawnCards[2].isReversed ? "逆位" : "正位"}):
-                  </span>
-                  <p className="text-xs text-slate-300">
-                    {drawnCards[2].card.actionItem}
-                  </p>
+                <div className="p-3.5 rounded-xl bg-dark-surface border border-cyber-lime/40 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-cyber-lime">
+                      ③ 高情商摸鱼/防雷策略 (【{drawnCards[2].card.nameCn}】{drawnCards[2].isReversed ? "逆位" : "正位"}):
+                    </span>
+                    {interpretation.source === "ai" ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyber-pink/20 text-cyber-pink border border-cyber-pink/40 shadow-sm">
+                        ✨ AI 专属策略 · {interpretation.modelName || "原生模型"}
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
+                        ⚡ 本地智能引擎
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-200 leading-relaxed">
+                    <MarkdownText content={interpretation.actionItem} />
+                  </div>
+                  {interpretation.errorMessage && (
+                    <div className="text-[11px] font-mono text-amber-400/90 pt-1 border-t border-slate-800/80">
+                      ⚠️ 提示: {interpretation.errorMessage}
+                    </div>
+                  )}
                 </div>
               </div>
 

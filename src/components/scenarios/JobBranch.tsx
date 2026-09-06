@@ -2,12 +2,13 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, PERSONAS, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
 import { SocialCardModal } from "@/components/share/SocialCardModal";
-import { GitBranch, Scale, Share2, RotateCcw, ArrowRight } from "lucide-react";
+import { MarkdownText } from "@/components/ui/MarkdownText";
+import { GitBranch, Scale, Share2, RotateCcw, ArrowRight, Loader2 } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface JobBranchProps {
@@ -20,6 +21,7 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
   >(null);
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // 抽 4 张牌 (左分支2张 + 右分支2张)
   const handleCardsDrawn = async () => {
@@ -41,8 +43,16 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
     const localInterp = generateSmartInterpretation(personaId, context);
     setInterpretation(localInterp);
 
-    const realInterp = await getTarotInterpretation(personaId, context);
-    setInterpretation(realInterp);
+    const hasApiKey = typeof window !== "undefined" && !!localStorage.getItem("cybertarot_api_key")?.trim();
+    if (hasApiKey) {
+      setIsAiLoading(true);
+      try {
+        const realInterp = await getTarotInterpretation(personaId, context);
+        setInterpretation(realInterp);
+      } finally {
+        setIsAiLoading(false);
+      }
+    }
 
     try {
       confetti({ particleCount: 40, spread: 70, origin: { y: 0.7 }, colors: ["#E2F952", "#FF2E93", "#00FF66"] });
@@ -54,6 +64,7 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
   const handleReset = () => {
     setDrawnCards(null);
     setInterpretation(null);
+    setIsAiLoading(false);
   };
 
   return (
@@ -146,18 +157,55 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-xs font-mono text-slate-400 font-semibold">【决策天平量化评估】</span>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  {interpretation.situationAnalysis}
-                </p>
+                <div className="text-xs sm:text-sm text-slate-300">
+                  <MarkdownText content={interpretation.situationAnalysis} />
+                </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-cyber-yellow/10 border border-cyber-yellow/30 text-xs sm:text-sm text-slate-200">
-                <span className="font-mono font-bold text-cyber-yellow block mb-1">
-                  【决断 Action Item】
-                </span>
-                {interpretation.actionItem}
+              {/* AI 思考中可视化提示 */}
+              {isAiLoading && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-dark-surface via-purple-950/20 to-dark-surface border border-cyber-yellow/50 animate-pulse flex flex-col gap-2 shadow-neon-yellow/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyber-yellow animate-ping" />
+                      <span className="text-xs font-mono font-bold text-cyber-yellow">
+                        🔮 【{PERSONAS[personaId].name}】正在连线大模型深度权衡博弈天平...
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500">最长等待2分钟</span>
+                  </div>
+                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyber-yellow shrink-0" />
+                    正在全面权衡原岗机会成本与跳槽破局收益比，为您生成专属行动 SOP...
+                  </p>
+                </div>
+              )}
+
+              <div className="p-4 rounded-xl bg-cyber-yellow/10 border border-cyber-yellow/30 text-xs sm:text-sm text-slate-200 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-cyber-yellow">
+                    【决断 Action Item】
+                  </span>
+                  {interpretation.source === "ai" ? (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyber-pink/20 text-cyber-pink border border-cyber-pink/40 shadow-sm">
+                      ✨ AI 专属建议 · {interpretation.modelName || "原生模型"}
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
+                      ⚡ 本地智能引擎
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs sm:text-sm text-slate-200">
+                  <MarkdownText content={interpretation.actionItem} />
+                </div>
+                {interpretation.errorMessage && (
+                  <div className="text-[11px] font-mono text-amber-400/90 pt-1 border-t border-slate-800/80">
+                    ⚠️ 提示: {interpretation.errorMessage}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">

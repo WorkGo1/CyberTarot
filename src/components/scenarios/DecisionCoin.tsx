@@ -2,12 +2,13 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, PERSONAS, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
 import { SocialCardModal } from "@/components/share/SocialCardModal";
-import { CircleDot, Sparkles, Share2, RotateCcw, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { MarkdownText } from "@/components/ui/MarkdownText";
+import { CircleDot, Sparkles, Share2, RotateCcw, CheckCircle2, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface DecisionCoinProps {
@@ -27,6 +28,7 @@ export const DecisionCoin: React.FC<DecisionCoinProps> = ({ personaId }) => {
   const [drawn, setDrawn] = useState<{ card: TarotCardData; isReversed: boolean } | null>(null);
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const handleCardsDrawn = async () => {
     const raw = drawRandomCards(1);
@@ -43,8 +45,16 @@ export const DecisionCoin: React.FC<DecisionCoinProps> = ({ personaId }) => {
     const localInterp = generateSmartInterpretation(personaId, context);
     setInterpretation(localInterp);
 
-    const realInterp = await getTarotInterpretation(personaId, context);
-    setInterpretation(realInterp);
+    const hasApiKey = typeof window !== "undefined" && !!localStorage.getItem("cybertarot_api_key")?.trim();
+    if (hasApiKey) {
+      setIsAiLoading(true);
+      try {
+        const realInterp = await getTarotInterpretation(personaId, context);
+        setInterpretation(realInterp);
+      } finally {
+        setIsAiLoading(false);
+      }
+    }
 
     try {
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 }, colors: ["#00FF66", "#00F0FF", "#E2F952"] });
@@ -56,6 +66,7 @@ export const DecisionCoin: React.FC<DecisionCoinProps> = ({ personaId }) => {
   const handleReset = () => {
     setDrawn(null);
     setInterpretation(null);
+    setIsAiLoading(false);
   };
 
   return (
@@ -153,11 +164,48 @@ export const DecisionCoin: React.FC<DecisionCoinProps> = ({ personaId }) => {
               {drawn.card.decisionVibe.caution}
             </div>
 
+            {/* AI 思考中可视化提示 */}
+            {isAiLoading && (
+              <div className="p-4 rounded-xl bg-gradient-to-r from-dark-surface via-purple-950/20 to-dark-surface border border-cyber-yellow/50 animate-pulse flex flex-col gap-2 shadow-neon-yellow/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyber-yellow animate-ping" />
+                    <span className="text-xs font-mono font-bold text-cyber-yellow">
+                      🔮 【{PERSONAS[personaId].name}】正在连线大模型深度权衡决断倾向...
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500">最长等待2分钟</span>
+                </div>
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyber-yellow shrink-0" />
+                  正在根据牌面象征结合当前困惑，生成最扎心/通透的决断建议...
+                </p>
+              </div>
+            )}
+
             {/* AI 人格解读金句 */}
             {interpretation && (
-              <div className="p-3.5 rounded-xl bg-dark-surface border border-dark-border text-xs sm:text-sm text-slate-300 leading-relaxed">
-                <strong>{interpretation.oneLiner}</strong>
-                <p className="mt-1.5 text-xs text-slate-400">{interpretation.actionItem}</p>
+              <div className="p-4 rounded-xl bg-dark-surface border border-dark-border text-xs sm:text-sm text-slate-300 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <strong className="text-white font-bold">{interpretation.oneLiner}</strong>
+                  {interpretation.source === "ai" ? (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyber-pink/20 text-cyber-pink border border-cyber-pink/40 shadow-sm shrink-0">
+                      ✨ AI 专属决断 · {interpretation.modelName || "原生模型"}
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+                      ⚡ 本地智能引擎
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-300 leading-relaxed">
+                  <MarkdownText content={interpretation.actionItem} />
+                </div>
+                {interpretation.errorMessage && (
+                  <div className="text-[11px] font-mono text-amber-400/90 pt-1 border-t border-slate-800/80">
+                    ⚠️ 提示: {interpretation.errorMessage}
+                  </div>
+                )}
               </div>
             )}
 

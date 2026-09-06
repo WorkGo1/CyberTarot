@@ -86,6 +86,9 @@ export interface InterpretationResult {
   actionItem: string;
   luckyBonus: string;
   fullMarkdown: string;
+  source?: "ai" | "local";
+  modelName?: string;
+  errorMessage?: string;
 }
 
 export interface ScenarioContext {
@@ -202,12 +205,153 @@ ${actionItem}
     actionItem,
     luckyBonus,
     fullMarkdown,
+    source: "local",
   };
 }
 
 /**
+ * 规范化 API Base URL
+ */
+export function normalizeApiBaseUrl(rawUrl: string): string {
+  let url = (rawUrl || "").trim();
+  if (!url) return "https://api.openai.com/v1";
+  url = url.replace(/\/+$/, "");
+  if (url.endsWith("/chat/completions")) {
+    url = url.substring(0, url.length - "/chat/completions".length).replace(/\/+$/, "");
+  }
+  if (
+    !url.endsWith("/v1") &&
+    (url.includes("deepseek.com") ||
+      url.includes("openai.com") ||
+      url.includes("siliconflow.cn") ||
+      url.includes("moonshot.cn"))
+  ) {
+    url = `${url}/v1`;
+  }
+  return url;
+}
+
+export interface ApiTestResult {
+  success: boolean;
+  latencyMs?: number;
+  message: string;
+  errorCode?: string;
+}
+
+/**
+ * 在前端直接测试大模型 API 连通性
+ */
+export async function testApiConnection(
+  apiKey: string,
+  rawBaseUrl?: string,
+  modelName?: string
+): Promise<ApiTestResult> {
+  const key = apiKey.trim();
+  if (!key) {
+    return {
+      success: false,
+      message: "未填写 API Key，请先输入 Key 后再测试连通性",
+      errorCode: "NO_KEY",
+    };
+  }
+
+  const baseUrl = normalizeApiBaseUrl(rawBaseUrl || "");
+  const model = (modelName || "").trim() || "deepseek-chat";
+  const startTime = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s 快速探测
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 5,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const latency = Date.now() - startTime;
+
+    if (!res.ok) {
+      let errDetail = "";
+      try {
+        const errJson = await res.json();
+        errDetail = errJson?.error?.message || JSON.stringify(errJson);
+      } catch {
+        errDetail = await res.text();
+      }
+
+      if (res.status === 401) {
+        return {
+          success: false,
+          errorCode: "401",
+          message: `身份验证失败 (401 Unauthorized)。请核对 API Key 是否正确或余额充足。\n服务端提示: ${errDetail}`,
+        };
+      }
+      if (res.status === 404) {
+        return {
+          success: false,
+          errorCode: "404",
+          message: `端点未找到 (404 Not Found)。当前尝试请求: ${baseUrl}/chat/completions。请检查 Base URL 是否正确。\n服务端提示: ${errDetail}`,
+        };
+      }
+      return {
+        success: false,
+        errorCode: String(res.status),
+        message: `HTTP 状态异常 [${res.status}]: ${errDetail || res.statusText}`,
+      };
+    }
+
+    const data = await res.json();
+    if (data?.choices?.[0]?.message) {
+      return {
+        success: true,
+        latencyMs: latency,
+        message: `连通成功！往返耗时 ${latency}ms，模型 [${model}] 正常响应。`,
+      };
+    } else {
+      return {
+        success: false,
+        errorCode: "INVALID_FORMAT",
+        message: "接口返回格式异常，未包含 choices[0].message",
+      };
+    }
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return {
+        success: false,
+        errorCode: "TIMEOUT",
+        message: "探测请求超时 (20秒)。请检查网络代理或 Base URL 是否通畅。",
+      };
+    }
+    if (err?.message?.includes("Failed to fetch") || err?.name === "TypeError") {
+      return {
+        success: false,
+        errorCode: "CORS_OR_NETWORK",
+        message:
+          "跨域或网络被拦截 (CORS Error)。由于 CyberTarot 纯静态运行于浏览器，目标端点必须配置允许跨域 (Access-Control-Allow-Origin: *)。建议使用支持 CORS 的大模型中转或反向代理。",
+      };
+    }
+    return {
+      success: false,
+      errorCode: "UNKNOWN",
+      message: `请求异常: ${err?.message || String(err)}`,
+    };
+  }
+}
+
+/**
  * 智能调度：检测是否配置真实大模型 API Key
- * 有 Key ➔ 真实 AI 接管；无 Key 或调用失败 ➔ 本地智能引擎兜底
+ * 有 Key ➔ 真实 AI 深度思考接管专属 Action Item；无 Key 或调用异常 ➔ 本地智能引擎兜底
+ * 超时时间统一设为 120,000ms (2分钟)
  */
 export async function getTarotInterpretation(
   personaId: PersonaId,
@@ -219,8 +363,8 @@ export async function getTarotInterpretation(
   const apiKey = localStorage.getItem("cybertarot_api_key")?.trim();
   if (!apiKey) return fallback;
 
-  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "https://api.openai.com/v1";
-  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "";
+  const baseUrl = normalizeApiBaseUrl(rawBaseUrl);
   const modelName = localStorage.getItem("cybertarot_model")?.trim() || "deepseek-chat";
 
   const persona = PERSONAS[personaId];
@@ -236,11 +380,12 @@ export async function getTarotInterpretation(
   const systemPrompt = `你是一位精通塔罗象征学与当代青年心理学的【${persona.name}】。
 角色设定：${persona.tonePrompt}
 风格要求：拒绝晦涩神秘学和说教，多用当代00后/年轻打工人流行语境（如恋爱脑、牛马、摸鱼、情绪价值、已读乱回等），字数控制在 200-300 字内。
+可适当使用 Markdown 格式（粗体、列表、引用）让输出更具呼吸感与层次。
 
 输出要求严格分为以下 4 块，每块用对应标题：
 【牌面一句话定调】：一句带梗或扎心的话总结。
 【现状深度剖析】：指出用户当前的心理卡点或现实困境。
-【AI专属建议】：给出一个具体的、可操作的现实小建议 (Action Item)。
+【AI专属建议】：给出一个具体的、可操作的现实小建议 (Action Item)，语言鲜活。
 【今日转运小彩蛋】：随机附赠一个微小开心的转运小动作。`;
 
   const userContent = `用户场景：${context.scenarioName}
@@ -250,7 +395,8 @@ ${cardsDesc}`;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 18000);
+    // 超时设置为 2 分钟 (120,000 ms)
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -272,13 +418,25 @@ ${cardsDesc}`;
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      console.warn("LLM API returned error, fallback to local:", res.status);
-      return fallback;
+      let errText = "";
+      try {
+        const errJson = await res.json();
+        errText = errJson?.error?.message || JSON.stringify(errJson);
+      } catch {
+        errText = await res.text();
+      }
+      console.warn("LLM API returned error, fallback to local:", res.status, errText);
+      return {
+        ...fallback,
+        errorMessage: `API 响应异常 [${res.status}]: ${errText.slice(0, 100)}`,
+      };
     }
 
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content;
-    if (!text) return fallback;
+    if (!text) {
+      return fallback;
+    }
 
     const oneLinerMatch = text.match(/【牌面一句话定调】[：:]?\s*([^\n]+)/);
     const situationMatch = text.match(/【现状深度剖析】[：:]?\s*([\s\S]+?)(?=【AI专属建议】|$)/);
@@ -291,10 +449,15 @@ ${cardsDesc}`;
       actionItem: actionMatch ? actionMatch[1].trim() : fallback.actionItem,
       luckyBonus: luckyMatch ? luckyMatch[1].trim() : fallback.luckyBonus,
       fullMarkdown: text,
+      source: "ai",
+      modelName,
     };
-  } catch (err) {
+  } catch (err: any) {
     console.warn("LLM API fetch failed, fallback to local:", err);
-    return fallback;
+    return {
+      ...fallback,
+      errorMessage: err?.name === "AbortError" ? "API 请求超时(2分钟)" : (err?.message || "网络调用异常"),
+    };
   }
 }
 
@@ -331,8 +494,8 @@ export async function getDeepDiveResponse(
   const apiKey = localStorage.getItem("cybertarot_api_key")?.trim();
   if (!apiKey) return fallback;
 
-  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "https://api.openai.com/v1";
-  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "";
+  const baseUrl = normalizeApiBaseUrl(rawBaseUrl);
   const modelName = localStorage.getItem("cybertarot_model")?.trim() || "deepseek-chat";
   const persona = PERSONAS[personaId];
 
@@ -343,11 +506,12 @@ export async function getDeepDiveResponse(
   const systemPrompt = `你是一位精通塔罗象征学与当代青年心理学的【${persona.name}】。
 说话语气风格：${persona.tonePrompt}
 当前牌阵是：${cardsDesc}。
-请以该人格的口吻，针对用户的追问给出直接、辛辣/温柔、有洞察力的回应，字数在 150 字左右。`;
+请以该人格的口吻，针对用户的追问给出直接、辛辣/温柔、有洞察力的回应，字数在 150-250 字左右。请适当使用 Markdown 格式（如加粗核心词、分段）提升可读性。`;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    // 追问同样设置为 2 分钟 (120,000 ms) 超时
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",

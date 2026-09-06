@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { TarotCardData } from "@/data/tarot-cards";
 import { soundManager } from "@/lib/audio-synthesizer";
+import { TarotCardArt } from "./TarotCardArt";
 import { 
   Sparkles, 
   Compass, 
@@ -192,17 +193,8 @@ export const TarotCard: React.FC<TarotCardProps> = ({
             </div>
 
             {/* 中心现代象征插画 */}
-            <div className={`flex flex-col items-center justify-center my-auto transition-transform ${isReversed ? "rotate-180" : ""}`}>
-              <div
-                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border flex items-center justify-center p-3 relative shadow-lg ${
-                  elementColors[card.element] || "border-slate-700 bg-slate-900"
-                }`}
-              >
-                {renderCardIcon(card.icon, "w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110")}
-                <div className="absolute -bottom-1 -right-1 text-[9px] font-mono px-1 py-0.5 rounded bg-dark-bg/90 border border-slate-700 uppercase">
-                  {card.element}
-                </div>
-              </div>
+            <div className="flex flex-col items-center justify-center my-auto w-full">
+              <TarotCardArt card={card} size={size} isReversed={isReversed} />
             </div>
 
             {/* 卡牌名称 */}
