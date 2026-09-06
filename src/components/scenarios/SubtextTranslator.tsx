@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
@@ -31,7 +31,7 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
   const [showShareModal, setShowShareModal] = useState(false);
 
   // 抽 3 张牌
-  const handleCardsDrawn = () => {
+  const handleCardsDrawn = async () => {
     const raw = drawRandomCards(3);
     const spread = [
       { card: raw[0].card, isReversed: raw[0].isReversed, positionName: "1. 表面态度 (Surface)" },
@@ -40,13 +40,18 @@ export const SubtextTranslator: React.FC<SubtextTranslatorProps> = ({ personaId 
     ];
     setDrawnCards(spread);
 
-    const interp = generateSmartInterpretation(personaId, {
-      scenarioId: "subtext",
+    const context = {
+      scenarioId: "subtext" as const,
       scenarioName: "老板/同事潜台词翻译器",
       userQuestion: question,
       drawnCards: spread,
-    });
-    setInterpretation(interp);
+    };
+
+    const localInterp = generateSmartInterpretation(personaId, context);
+    setInterpretation(localInterp);
+
+    const realInterp = await getTarotInterpretation(personaId, context);
+    setInterpretation(realInterp);
 
     try {
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 }, colors: ["#00F0FF", "#00FF66", "#E2F952"] });

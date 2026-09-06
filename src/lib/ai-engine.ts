@@ -206,6 +206,99 @@ ${actionItem}
 }
 
 /**
+ * 智能调度：检测是否配置真实大模型 API Key
+ * 有 Key ➔ 真实 AI 接管；无 Key 或调用失败 ➔ 本地智能引擎兜底
+ */
+export async function getTarotInterpretation(
+  personaId: PersonaId,
+  context: ScenarioContext
+): Promise<InterpretationResult> {
+  const fallback = generateSmartInterpretation(personaId, context);
+  if (typeof window === "undefined") return fallback;
+
+  const apiKey = localStorage.getItem("cybertarot_api_key")?.trim();
+  if (!apiKey) return fallback;
+
+  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "https://api.openai.com/v1";
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const modelName = localStorage.getItem("cybertarot_model")?.trim() || "deepseek-chat";
+
+  const persona = PERSONAS[personaId];
+  const cardsDesc = context.drawnCards
+    .map(
+      (c) =>
+        `${c.positionName || "卡牌"}: ${c.card.nameCn} (${c.card.nameEn}) - ${
+          c.isReversed ? "逆位" : "正位"
+        } [关键词: ${(c.isReversed ? c.card.reversedKeywords : c.card.uprightKeywords).join(", ")}]`
+    )
+    .join("\n");
+
+  const systemPrompt = `你是一位精通塔罗象征学与当代青年心理学的【${persona.name}】。
+角色设定：${persona.tonePrompt}
+风格要求：拒绝晦涩神秘学和说教，多用当代00后/年轻打工人流行语境（如恋爱脑、牛马、摸鱼、情绪价值、已读乱回等），字数控制在 200-300 字内。
+
+输出要求严格分为以下 4 块，每块用对应标题：
+【牌面一句话定调】：一句带梗或扎心的话总结。
+【现状深度剖析】：指出用户当前的心理卡点或现实困境。
+【AI专属建议】：给出一个具体的、可操作的现实小建议 (Action Item)。
+【今日转运小彩蛋】：随机附赠一个微小开心的转运小动作。`;
+
+  const userContent = `用户场景：${context.scenarioName}
+用户面对的问题/情况：${context.userQuestion || "今日整体运势与生活困扰"}
+抽取的牌阵：
+${cardsDesc}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 18000);
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.8,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.warn("LLM API returned error, fallback to local:", res.status);
+      return fallback;
+    }
+
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) return fallback;
+
+    const oneLinerMatch = text.match(/【牌面一句话定调】[：:]?\s*([^\n]+)/);
+    const situationMatch = text.match(/【现状深度剖析】[：:]?\s*([\s\S]+?)(?=【AI专属建议】|$)/);
+    const actionMatch = text.match(/【AI专属建议】[：:]?\s*([\s\S]+?)(?=【今日转运小彩蛋】|$)/);
+    const luckyMatch = text.match(/【今日转运小彩蛋】[：:]?\s*([\s\S]+?)$/);
+
+    return {
+      oneLiner: oneLinerMatch ? oneLinerMatch[1].trim() : fallback.oneLiner,
+      situationAnalysis: situationMatch ? situationMatch[1].trim() : fallback.situationAnalysis,
+      actionItem: actionMatch ? actionMatch[1].trim() : fallback.actionItem,
+      luckyBonus: luckyMatch ? luckyMatch[1].trim() : fallback.luckyBonus,
+      fullMarkdown: text,
+    };
+  } catch (err) {
+    console.warn("LLM API fetch failed, fallback to local:", err);
+    return fallback;
+  }
+}
+
+/**
  * 追问 (Deep Dive) 智能回应引擎
  */
 export function generateDeepDiveResponse(
@@ -226,4 +319,61 @@ export function generateDeepDiveResponse(
     return `在以太场域中，你的问题“${question}”与【${cardName}】的几何象征产生了共鸣。所谓的困局，不过是你意识投影在物质界的一场全息游戏。当你不再将力量赋予外部的评价系统，答案早已自然显现。放下对确定性的贪恋，答案就在静默的呼吸之间。🔮`;
   }
 }
+
+export async function getDeepDiveResponse(
+  question: string,
+  personaId: PersonaId,
+  context: ScenarioContext
+): Promise<string> {
+  const fallback = generateDeepDiveResponse(question, personaId, context);
+  if (typeof window === "undefined") return fallback;
+
+  const apiKey = localStorage.getItem("cybertarot_api_key")?.trim();
+  if (!apiKey) return fallback;
+
+  const rawBaseUrl = localStorage.getItem("cybertarot_base_url")?.trim() || "https://api.openai.com/v1";
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const modelName = localStorage.getItem("cybertarot_model")?.trim() || "deepseek-chat";
+  const persona = PERSONAS[personaId];
+
+  const cardsDesc = context.drawnCards
+    .map((c) => `${c.card.nameCn} (${c.isReversed ? "逆位" : "正位"})`)
+    .join(", ");
+
+  const systemPrompt = `你是一位精通塔罗象征学与当代青年心理学的【${persona.name}】。
+说话语气风格：${persona.tonePrompt}
+当前牌阵是：${cardsDesc}。
+请以该人格的口吻，针对用户的追问给出直接、辛辣/温柔、有洞察力的回应，字数在 150 字左右。`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: question },
+        ],
+        temperature: 0.8,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) return fallback;
+
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 

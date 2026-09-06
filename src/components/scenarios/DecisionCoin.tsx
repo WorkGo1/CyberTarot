@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
@@ -28,18 +28,23 @@ export const DecisionCoin: React.FC<DecisionCoinProps> = ({ personaId }) => {
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const handleCardsDrawn = () => {
+  const handleCardsDrawn = async () => {
     const raw = drawRandomCards(1);
     const primary = raw[0];
     setDrawn(primary);
 
-    const interp = generateSmartInterpretation(personaId, {
-      scenarioId: "decision-coin",
+    const context = {
+      scenarioId: "decision-coin" as const,
       scenarioName: "赛博抛硬币",
       userQuestion: question,
       drawnCards: [{ card: primary.card, isReversed: primary.isReversed, positionName: "决断核心" }],
-    });
-    setInterpretation(interp);
+    };
+
+    const localInterp = generateSmartInterpretation(personaId, context);
+    setInterpretation(localInterp);
+
+    const realInterp = await getTarotInterpretation(personaId, context);
+    setInterpretation(realInterp);
 
     try {
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 }, colors: ["#00FF66", "#00F0FF", "#E2F952"] });

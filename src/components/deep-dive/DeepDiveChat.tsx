@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { PERSONAS, PersonaId, ScenarioContext, generateDeepDiveResponse } from "@/lib/ai-engine";
+import { PERSONAS, PersonaId, ScenarioContext, getDeepDiveResponse } from "@/lib/ai-engine";
 import { soundManager } from "@/lib/audio-synthesizer";
 import { Send, Sparkles, MessageCircle } from "lucide-react";
 
@@ -26,7 +26,7 @@ export const DeepDiveChat: React.FC<DeepDiveChatProps> = ({
   const maxRounds = 3;
   const currentRound = messages.filter((m) => m.sender === "user").length;
 
-  const handleSendQuestion = (questionText: string) => {
+  const handleSendQuestion = async (questionText: string) => {
     if (!questionText.trim() || currentRound >= maxRounds || isTyping) return;
 
     soundManager.playButtonClick();
@@ -37,13 +37,10 @@ export const DeepDiveChat: React.FC<DeepDiveChatProps> = ({
     setInputVal("");
     setIsTyping(true);
 
-    // 模拟思考并生成回应
-    setTimeout(() => {
-      const reply = generateDeepDiveResponse(questionText, personaId, context);
-      setMessages([...newMsgs, { sender: "ai", text: reply }]);
-      setIsTyping(false);
-      soundManager.playChimeSound();
-    }, 600);
+    const reply = await getDeepDiveResponse(questionText, personaId, context);
+    setMessages([...newMsgs, { sender: "ai", text: reply }]);
+    setIsTyping(false);
+    soundManager.playChimeSound();
   };
 
   return (

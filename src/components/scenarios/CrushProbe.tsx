@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
@@ -22,34 +22,37 @@ export const CrushProbe: React.FC<CrushProbeProps> = ({ personaId }) => {
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const handleCardsDrawn = () => {
+  const handleCardsDrawn = async () => {
+    let spread: { card: TarotCardData; isReversed: boolean; positionName: string }[] = [];
+    const scenarioName = subMode === "probe" ? "Crush 意图探针" : "恋爱脑清醒符";
+
     if (subMode === "probe") {
       const raw = drawRandomCards(3);
-      const spread = [
+      spread = [
         { card: raw[0].card, isReversed: raw[0].isReversed, positionName: "1. TA目前的状态" },
         { card: raw[1].card, isReversed: raw[1].isReversed, positionName: "2. 对你的真实感受" },
         { card: raw[2].card, isReversed: raw[2].isReversed, positionName: "3. 未来阻碍与走向" },
       ];
-      setDrawnCards(spread);
-      const interp = generateSmartInterpretation(personaId, {
-        scenarioId: "crush",
-        scenarioName: "Crush 意图探针",
-        drawnCards: spread,
-      });
-      setInterpretation(interp);
     } else {
       const raw = drawRandomCards(1);
-      const spread = [
+      spread = [
         { card: raw[0].card, isReversed: raw[0].isReversed, positionName: "恋爱脑清醒符" },
       ];
-      setDrawnCards(spread);
-      const interp = generateSmartInterpretation(personaId, {
-        scenarioId: "crush",
-        scenarioName: "恋爱脑清醒符",
-        drawnCards: spread,
-      });
-      setInterpretation(interp);
     }
+
+    setDrawnCards(spread);
+
+    const context = {
+      scenarioId: "crush" as const,
+      scenarioName,
+      drawnCards: spread,
+    };
+
+    const localInterp = generateSmartInterpretation(personaId, context);
+    setInterpretation(localInterp);
+
+    const realInterp = await getTarotInterpretation(personaId, context);
+    setInterpretation(realInterp);
 
     try {
       confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 }, colors: ["#FF2E93", "#A855F7", "#00F0FF"] });

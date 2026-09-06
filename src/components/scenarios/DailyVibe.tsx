@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
@@ -22,18 +22,24 @@ export const DailyVibe: React.FC<DailyVibeProps> = ({ personaId }) => {
   const [showShareModal, setShowShareModal] = useState(false);
 
   // 抽牌
-  const handleCardsDrawn = () => {
+  const handleCardsDrawn = async () => {
     const cards = drawRandomCards(1);
     const primary = cards[0];
     setDrawn(primary);
     setIsFlipped(true);
 
-    const interp = generateSmartInterpretation(personaId, {
-      scenarioId: "daily-vibe",
+    const context = {
+      scenarioId: "daily-vibe" as const,
       scenarioName: subMode === "banwei" ? "打工人今日班味运势" : "情绪能量签",
       drawnCards: [{ card: primary.card, isReversed: primary.isReversed, positionName: "今日核心能量" }],
-    });
-    setInterpretation(interp);
+    };
+
+    // 先用本地引擎秒出结果，若有 API Key 则异步被真实 AI 接管覆盖
+    const localInterp = generateSmartInterpretation(personaId, context);
+    setInterpretation(localInterp);
+
+    const realInterp = await getTarotInterpretation(personaId, context);
+    setInterpretation(realInterp);
 
     // 庆祝纸屑
     try {

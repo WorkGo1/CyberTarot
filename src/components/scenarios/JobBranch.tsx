@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TarotCardData, drawRandomCards } from "@/data/tarot-cards";
-import { PersonaId, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
+import { PersonaId, getTarotInterpretation, generateSmartInterpretation, InterpretationResult } from "@/lib/ai-engine";
 import { TarotCard } from "@/components/card/TarotCard";
 import { RitualDeck } from "@/components/card/RitualDeck";
 import { DeepDiveChat } from "@/components/deep-dive/DeepDiveChat";
@@ -22,7 +22,7 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
   const [showShareModal, setShowShareModal] = useState(false);
 
   // 抽 4 张牌 (左分支2张 + 右分支2张)
-  const handleCardsDrawn = () => {
+  const handleCardsDrawn = async () => {
     const raw = drawRandomCards(4);
     const spread = [
       { card: raw[0].card, isReversed: raw[0].isReversed, positionName: "留在原岗 · 能量消耗" },
@@ -32,12 +32,17 @@ export const JobBranch: React.FC<JobBranchProps> = ({ personaId }) => {
     ];
     setDrawnCards(spread);
 
-    const interp = generateSmartInterpretation(personaId, {
-      scenarioId: "job-branch",
+    const context = {
+      scenarioId: "job-branch" as const,
       scenarioName: "离职/跳槽二选一牌阵",
       drawnCards: spread,
-    });
-    setInterpretation(interp);
+    };
+
+    const localInterp = generateSmartInterpretation(personaId, context);
+    setInterpretation(localInterp);
+
+    const realInterp = await getTarotInterpretation(personaId, context);
+    setInterpretation(realInterp);
 
     try {
       confetti({ particleCount: 40, spread: 70, origin: { y: 0.7 }, colors: ["#E2F952", "#FF2E93", "#00FF66"] });
